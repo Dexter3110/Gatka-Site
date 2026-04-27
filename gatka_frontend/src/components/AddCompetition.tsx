@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Menu, X, Trophy, ArrowLeft, Calendar, MapPin, Users, Save } from 'lucide-react';
+import { createCompetition } from '../api/api';
 
 interface AddCompetitionProps {
   userEmail: string;
@@ -20,6 +21,10 @@ export function AddCompetition({ userEmail, onLogout, onNavigate }: AddCompetiti
     maxParticipants: '',
     ageCategories: [] as string[],
   });
+
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [successMsg, setSuccessMsg]     = useState('');
+  const [errorMsg, setErrorMsg]         = useState('');
 
   const ageCategoryOptions = [
     'Bhujhang (U-11 Years)',
@@ -44,12 +49,40 @@ export function AddCompetition({ userEmail, onLogout, onNavigate }: AddCompetiti
     }));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    console.log('Competition Data:', formData);
-    // Here you would send data to backend
-    alert('Competition added successfully! (Mock - no backend yet)');
-    onNavigate('manage-competitions');
+    setSuccessMsg('');
+    setErrorMsg('');
+
+    // Validate at least one age category selected
+    if (formData.ageCategories.length === 0) {
+      setErrorMsg('Please select at least one age category.');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      await createCompetition({
+        name:                  formData.competitionName.trim(),
+        venue:                 formData.venue.trim() || undefined,
+        start_date:            formData.startDate,
+        end_date:              formData.endDate || undefined,
+        registration_deadline: formData.registrationDeadline || undefined,
+        max_participants:      formData.maxParticipants ? Number(formData.maxParticipants) : undefined,
+        status:                formData.status,
+        description:           formData.description.trim() || undefined,
+        age_categories:        formData.ageCategories.map(name => ({ category_name: name })),
+      });
+      setSuccessMsg('Competition added successfully! Redirecting...');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      setTimeout(() => onNavigate('manage-competitions'), 1500);
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Failed to add competition. Please try again.');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -151,6 +184,16 @@ export function AddCompetition({ userEmail, onLogout, onNavigate }: AddCompetiti
 
         {/* Content */}
         <div className="p-6">
+          {successMsg && (
+            <div className="max-w-4xl mx-auto mb-4 flex items-center gap-2 bg-green-50 border border-green-400 text-green-700 rounded p-3 text-sm">
+              ✅ {successMsg}
+            </div>
+          )}
+          {errorMsg && (
+            <div className="max-w-4xl mx-auto mb-4 flex items-center gap-2 bg-red-50 border border-red-400 text-red-700 rounded p-3 text-sm">
+              ❌ {errorMsg}
+            </div>
+          )}
           <div className="max-w-4xl mx-auto">
             <form onSubmit={handleSubmit} className="bg-white rounded-lg shadow">
               <div className="p-6 border-b border-gray-200">
@@ -327,10 +370,20 @@ export function AddCompetition({ userEmail, onLogout, onNavigate }: AddCompetiti
                 </button>
                 <button
                   type="submit"
-                  className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors flex items-center gap-2"
+                  disabled={isSubmitting}
+                  className={`px-6 py-2 rounded-lg transition-colors flex items-center gap-2 text-white ${
+                    isSubmitting ? 'bg-blue-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'
+                  }`}
                 >
-                  <Save className="w-4 h-4" />
-                  Save Competition
+                  {isSubmitting ? (
+                    <svg className="animate-spin w-4 h-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
+                    </svg>
+                  ) : (
+                    <Save className="w-4 h-4" />
+                  )}
+                  {isSubmitting ? 'Saving...' : 'Save Competition'}
                 </button>
               </div>
             </form>
