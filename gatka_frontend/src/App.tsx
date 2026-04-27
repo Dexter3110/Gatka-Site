@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Mail, Lock, RefreshCw } from 'lucide-react';
+import { Mail, Lock, RefreshCw, Loader2 } from 'lucide-react';
 import { Dashboard } from './components/Dashboard';
 import { ManagePlayers } from './components/ManagePlayers';
 import { PlayersRegistration } from './components/PlayersRegistration';
@@ -11,7 +11,10 @@ import { AddCompetition } from './components/AddCompetition';
 import { ManageCompetitions } from './components/ManageCompetitions';
 import { ManageUsers } from './components/ManageUsers';
 import { AddUser } from './components/AddUser';
-import { login, saveToken } from './api/api';
+import { login, saveToken, clearToken, getMe, getToken } from './api/api';
+
+// Admin-only pages that non-admin users cannot access
+const ADMIN_PAGES = ['admin-dashboard', 'add-competition', 'manage-competitions', 'manage-users', 'add-user', 'admin-settings'];
 
 export default function App() {
   const [email, setEmail] = useState('');
@@ -19,16 +22,38 @@ export default function App() {
   const [captchaInput, setCaptchaInput] = useState('');
   const [captchaQuestion, setCaptchaQuestion] = useState({ num1: 0, num2: 0, answer: 0 });
   const [errors, setErrors] = useState({ email: '', password: '', captcha: '' });
-  const [loginSuccess, setLoginSuccess] = useState(false);
   const [showDashboard, setShowDashboard] = useState(false);
   const [loggedInEmail, setLoggedInEmail] = useState('');
   const [isAdmin, setIsAdmin] = useState(false);
   const [currentPage, setCurrentPage] = useState('dashboard');
   const [reportParams, setReportParams] = useState({ competition: '', district: '', gender: '' });
+  const [isRestoringSession, setIsRestoringSession] = useState(true);
 
-  // Generate captcha on component mount and when refreshed
+  // On mount: generate captcha + try to restore session from stored token
   useEffect(() => {
     generateCaptcha();
+
+    const restoreSession = async () => {
+      const token = getToken();
+      if (!token) {
+        setIsRestoringSession(false);
+        return;
+      }
+      try {
+        const user = await getMe();
+        setLoggedInEmail(user.email);
+        setIsAdmin(user.role === 'admin');
+        setCurrentPage(user.role === 'admin' ? 'admin-dashboard' : 'dashboard');
+        setShowDashboard(true);
+      } catch {
+        // Token is invalid or expired — clear it and show login
+        clearToken();
+      } finally {
+        setIsRestoringSession(false);
+      }
+    };
+
+    restoreSession();
   }, []);
 
   const generateCaptcha = () => {
@@ -85,7 +110,9 @@ export default function App() {
       const result = await login(email, password);
       saveToken(result.access_token);
       setLoggedInEmail(email);
-      setIsAdmin(result.role === 'admin');
+      const userIsAdmin = result.role === 'admin';
+      setIsAdmin(userIsAdmin);
+      setCurrentPage(userIsAdmin ? 'admin-dashboard' : 'dashboard');
       setShowDashboard(true);
     } catch (err: any) {
       setErrors({ ...errors, password: err.message });
@@ -95,13 +122,16 @@ export default function App() {
 };
 
   const handleLogout = () => {
+    clearToken();
     setShowDashboard(false);
     setLoggedInEmail('');
+    setIsAdmin(false);
     setEmail('');
     setPassword('');
     setCaptchaInput('');
     setErrors({ email: '', password: '', captcha: '' });
     setCurrentPage('dashboard');
+    setReportParams({ competition: '', district: '', gender: '' });
     generateCaptcha();
   };
 
@@ -118,11 +148,29 @@ export default function App() {
       });
       setCurrentPage('report');
     } else {
+      // Auth guard: non-admin users cannot access admin-only pages
+      if (ADMIN_PAGES.includes(page) && !isAdmin) {
+        setCurrentPage('dashboard');
+        return;
+      }
       setCurrentPage(page);
     }
   };
 
+  // Show loading spinner while restoring session from token
+  if (isRestoringSession) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[#e8ebef]">
+        <div className="flex flex-col items-center gap-3">
+          <Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
+          <p className="text-gray-600 text-sm">Restoring session...</p>
+        </div>
+      </div>
+    );
+  }
+
   if (showDashboard) {
+    // Shared pages accessible to all authenticated users
     if (currentPage === 'players') {
       return <ManagePlayers userEmail={loggedInEmail} onLogout={handleLogout} onNavigate={handleNavigate} />;
     }
@@ -138,6 +186,8 @@ export default function App() {
     if (currentPage === 'report') {
       return <ReportPage userEmail={loggedInEmail} onLogout={handleLogout} onNavigate={handleNavigate} competition={reportParams.competition} district={reportParams.district} gender={reportParams.gender} />;
     }
+
+    // Admin-only pages — non-admins fall through to regular Dashboard
     if (isAdmin) {
       if (currentPage === 'admin-dashboard' || currentPage === 'dashboard') {
         return <AdminDashboard userEmail={loggedInEmail} onLogout={handleLogout} onNavigate={handleNavigate} />;
@@ -158,39 +208,12 @@ export default function App() {
         return <Dashboard userEmail={loggedInEmail} onLogout={handleLogout} onNavigate={handleNavigate} isAdmin={true} />;
       }
     }
+
+    // Default: regular user dashboard (also catches non-admin trying to access admin pages)
     return <Dashboard userEmail={loggedInEmail} onLogout={handleLogout} onNavigate={handleNavigate} isAdmin={isAdmin} />;
   }
 
-  if (loginSuccess) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-[#e8ebef]">
-        <div className="bg-white rounded-lg shadow-lg p-12 w-full max-w-md text-center">
-          <div className="mb-6">
-            <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-              <svg className="w-8 h-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-              </svg>
-            </div>
-            <h2 className="text-2xl mb-2">Login Successful!</h2>
-            <p className="text-gray-600">Welcome to Gatka Federation of Maharashtra</p>
-          </div>
-          <button
-            onClick={() => {
-              setLoginSuccess(false);
-              setEmail('');
-              setPassword('');
-              setCaptchaInput('');
-              setErrors({ email: '', password: '', captcha: '' });
-              generateCaptcha();
-            }}
-            className="text-blue-600 hover:underline"
-          >
-            Back to Login
-          </button>
-        </div>
-      </div>
-    );
-  }
+  // Login form shown when user is not authenticated
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-[#e8ebef] p-4">

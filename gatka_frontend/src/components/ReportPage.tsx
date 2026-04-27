@@ -1,6 +1,8 @@
-import React, { useState } from 'react';
-import { ChevronDown, ChevronUp, Users, UserPlus, Menu, X, Printer, Lock } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { ChevronDown, ChevronUp, Users, UserPlus, Menu, X, Printer, Lock, Loader2, AlertCircle } from 'lucide-react';
 import logoImage from 'figma:asset/56e9d8823c6cc761c45e09ce5421e3f32636cd7d.png';
+import { listCompetitions, listRegistrations, listPlayers } from '../api/api';
+import type { Competition, Registration, Player } from '../api/api';
 
 interface ReportPageProps {
   userEmail: string;
@@ -16,106 +18,130 @@ export function ReportPage({ userEmail, onLogout, onNavigate, competition, distr
   const [manageRegDropdownOpen, setManageRegDropdownOpen] = useState(false);
   const [stateReportsDropdownOpen, setStateReportsDropdownOpen] = useState(true);
 
+  // Live data state
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [competitionData, setCompetitionData] = useState<Competition | null>(null);
+  const [registrations, setRegistrations] = useState<Registration[]>([]);
+  const [players, setPlayers] = useState<Player[]>([]);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      setLoading(true);
+      setError('');
+      try {
+        // Fetch competitions to find the selected one
+        const comps = await listCompetitions();
+        
+        // Try to match by competition ID or name
+        let matchedComp: Competition | null = null;
+        if (competition) {
+          // Try as ID first
+          const compId = parseInt(competition);
+          if (!isNaN(compId)) {
+            matchedComp = comps.find(c => c.id === compId) || null;
+          }
+          // Fallback: try matching by name key
+          if (!matchedComp) {
+            matchedComp = comps.find(c => 
+              c.name.toLowerCase().includes(competition.toLowerCase()) ||
+              competition.toLowerCase().includes(c.name.toLowerCase())
+            ) || null;
+          }
+          // If still no match, use the first competition
+          if (!matchedComp && comps.length > 0) {
+            matchedComp = comps[0];
+          }
+        } else if (comps.length > 0) {
+          matchedComp = comps[0];
+        }
+
+        setCompetitionData(matchedComp);
+
+        // Fetch registrations and players
+        const [regsData, playersData] = await Promise.all([
+          matchedComp ? listRegistrations({ competition_id: matchedComp.id }) : Promise.resolve([]),
+          listPlayers(gender ? { gender } : undefined),
+        ]);
+
+        setRegistrations(regsData);
+        setPlayers(playersData);
+      } catch (err: any) {
+        setError(err.message || 'Failed to load report data');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchData();
+  }, [competition, gender]);
+
   const handlePrint = () => {
     window.print();
   };
 
-  const handleExport = () => {
-    console.log('Exporting report...');
-  };
-
-  // Competition details mapping - can be extended based on selected competition
-  const competitionDetails: Record<string, {
-    name: string;
-    venue: string;
-    dates: string;
-  }> = {
-    'competition1': {
-      name: '9th SENIOR NATIONAL GATKA CHAMPIONSHIP 2025 (MEN & WOMEN)',
-      venue: 'Ratwara Sahib, New Chandigarh, Mohali (Punjab)',
-      dates: '28-30 December 2025'
-    },
-    'competition2': {
-      name: '5th JUNIOR NATIONAL GATKA CHAMPIONSHIP 2025',
-      venue: 'Mumbai, Maharashtra',
-      dates: '15-17 January 2025'
+  // Compute report data from live registrations
+  const filteredRegistrations = registrations.filter(reg => {
+    // Filter by gender if specified
+    if (gender && reg.player) {
+      return reg.player.gender === gender;
     }
-  };
+    return true;
+  });
 
-  // Get current competition details or use default
-  const currentCompetition = competition && competitionDetails[competition] 
-    ? competitionDetails[competition]
-    : competitionDetails['competition1'];
+  // Count unique players participated
+  const uniquePlayerIds = new Set(filteredRegistrations.map(r => r.player_id));
+  const playersParticipated = uniquePlayerIds.size;
 
-  // Mock data for different age categories - reordered as requested
-  const ageCategories = [
-    {
-      name: 'Bhujhang (U-11 Years)',
-      events: [
-        { srNo: 1, event: 'Team Demo', minPlayer: 8, maxPlayer: 11, registered: 'N-A' },
-        { srNo: 2, event: 'Individual Demo', minPlayer: 1, maxPlayer: 1, registered: 'N-A' },
-        { srNo: 3, event: 'Team Fari Soti', minPlayer: 3, maxPlayer: 4, registered: 'N-A' },
-        { srNo: 4, event: 'Individual Fari Soti', minPlayer: 1, maxPlayer: 1, registered: 'N-A' },
-        { srNo: 5, event: 'Team Single Soti', minPlayer: 3, maxPlayer: 4, registered: 'N-A' },
-        { srNo: 6, event: 'Individual Single Soti', minPlayer: 1, maxPlayer: 1, registered: 'N-A' },
-      ]
-    },
-    {
-      name: 'Tufang (U-14 Years)',
-      events: [
-        { srNo: 1, event: 'Team Demo', minPlayer: 8, maxPlayer: 11, registered: 'N-A' },
-        { srNo: 2, event: 'Individual Demo', minPlayer: 1, maxPlayer: 1, registered: 'N-A' },
-        { srNo: 3, event: 'Team Fari Soti', minPlayer: 3, maxPlayer: 4, registered: 'N-A' },
-        { srNo: 4, event: 'Individual Fari Soti', minPlayer: 1, maxPlayer: 1, registered: 'N-A' },
-        { srNo: 5, event: 'Team Single Soti', minPlayer: 3, maxPlayer: 4, registered: 'N-A' },
-        { srNo: 6, event: 'Individual Single Soti', minPlayer: 1, maxPlayer: 1, registered: 'N-A' },
-      ]
-    },
-    {
-      name: 'Sool (U-17 Years)',
-      events: [
-        { srNo: 1, event: 'Team Demo', minPlayer: 8, maxPlayer: 11, registered: 'N-A' },
-        { srNo: 2, event: 'Individual Demo', minPlayer: 1, maxPlayer: 1, registered: 'N-A' },
-        { srNo: 3, event: 'Team Fari Soti', minPlayer: 3, maxPlayer: 4, registered: 'N-A' },
-        { srNo: 4, event: 'Individual Fari Soti', minPlayer: 1, maxPlayer: 1, registered: 'N-A' },
-        { srNo: 5, event: 'Team Single Soti', minPlayer: 3, maxPlayer: 4, registered: 'N-A' },
-        { srNo: 6, event: 'Individual Single Soti', minPlayer: 1, maxPlayer: 1, registered: 'N-A' },
-      ]
-    },
-    {
-      name: 'Saif (U-19 Years)',
-      events: [
-        { srNo: 1, event: 'Individual Demo', minPlayer: 1, maxPlayer: 1, registered: 'N-A' },
-        { srNo: 2, event: 'Team Fari Soti', minPlayer: 3, maxPlayer: 4, registered: 'N-A' },
-        { srNo: 3, event: 'Individual Fari Soti', minPlayer: 1, maxPlayer: 1, registered: 'N-A' },
-        { srNo: 4, event: 'Team Single Soti', minPlayer: 3, maxPlayer: 4, registered: 'N-A' },
-        { srNo: 5, event: 'Individual Single Soti', minPlayer: 1, maxPlayer: 1, registered: 'N-A' },
-        { srNo: 6, event: 'Team Demo', minPlayer: 8, maxPlayer: 11, registered: 'N-A' },
-      ]
-    },
-    {
-      name: 'Sipar (U-25 Years)',
-      events: [
-        { srNo: 1, event: 'Individual Demo', minPlayer: 1, maxPlayer: 1, registered: 'N-A' },
-        { srNo: 2, event: 'Team Fari Soti', minPlayer: 3, maxPlayer: 4, registered: 'N-A' },
-        { srNo: 3, event: 'Individual Fari Soti', minPlayer: 1, maxPlayer: 1, registered: 'N-A' },
-        { srNo: 4, event: 'Team Single Soti', minPlayer: 3, maxPlayer: 4, registered: 'N-A' },
-        { srNo: 5, event: 'Individual Single Soti', minPlayer: 1, maxPlayer: 1, registered: 'N-A' },
-        { srNo: 6, event: 'Team Demo', minPlayer: 8, maxPlayer: 11, registered: 'N-A' },
-      ]
-    },
-    {
-      name: 'Sipar (U-30 Years)',
-      events: [
-        { srNo: 1, event: 'Individual Demo', minPlayer: 1, maxPlayer: 1, registered: 'N-A' },
-        { srNo: 2, event: 'Team Fari Soti', minPlayer: 3, maxPlayer: 4, registered: 'N-A' },
-        { srNo: 3, event: 'Individual Fari Soti', minPlayer: 1, maxPlayer: 1, registered: 'N-A' },
-        { srNo: 4, event: 'Team Single Soti', minPlayer: 3, maxPlayer: 4, registered: 'N-A' },
-        { srNo: 5, event: 'Individual Single Soti', minPlayer: 1, maxPlayer: 1, registered: 'N-A' },
-        { srNo: 6, event: 'Team Demo', minPlayer: 8, maxPlayer: 11, registered: 'N-A' },
-      ]
-    }
+  // Count total events played
+  const eventsPlayed = filteredRegistrations.length;
+
+  // Group registrations by age_category and event_name
+  const registrationCounts: Record<string, Record<string, number>> = {};
+  filteredRegistrations.forEach(reg => {
+    const cat = reg.age_category || 'Uncategorized';
+    const evt = reg.event_name || 'Unknown Event';
+    if (!registrationCounts[cat]) registrationCounts[cat] = {};
+    if (!registrationCounts[cat][evt]) registrationCounts[cat][evt] = 0;
+    registrationCounts[cat][evt]++;
+  });
+
+  // Format competition details
+  const compName = competitionData?.name || 'No competition selected';
+  const compVenue = competitionData?.venue || '';
+  const compDates = competitionData ? (() => {
+    const start = new Date(competitionData.start_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' });
+    const end = competitionData.end_date ? new Date(competitionData.end_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' }) : '';
+    return end ? `${start} - ${end}` : start;
+  })() : '';
+
+  // Build age categories from competition data or use defaults
+  const defaultAgeCategories = [
+    { name: 'Bhujhang (U-11 Years)', events: ['Team Demo', 'Individual Demo', 'Team Fari Soti', 'Individual Fari Soti', 'Team Single Soti', 'Individual Single Soti'] },
+    { name: 'Tufang (U-14 Years)', events: ['Team Demo', 'Individual Demo', 'Team Fari Soti', 'Individual Fari Soti', 'Team Single Soti', 'Individual Single Soti'] },
+    { name: 'Sool (U-17 Years)', events: ['Team Demo', 'Individual Demo', 'Team Fari Soti', 'Individual Fari Soti', 'Team Single Soti', 'Individual Single Soti'] },
+    { name: 'Saif (U-19 Years)', events: ['Individual Demo', 'Team Fari Soti', 'Individual Fari Soti', 'Team Single Soti', 'Individual Single Soti', 'Team Demo'] },
+    { name: 'Sipar (U-25 Years)', events: ['Individual Demo', 'Team Fari Soti', 'Individual Fari Soti', 'Team Single Soti', 'Individual Single Soti', 'Team Demo'] },
+    { name: 'Sipar (U-30 Years)', events: ['Individual Demo', 'Team Fari Soti', 'Individual Fari Soti', 'Team Single Soti', 'Individual Single Soti', 'Team Demo'] },
   ];
+
+  // Use competition age_categories if available, fall back to defaults
+  const ageCategories = competitionData?.age_categories && competitionData.age_categories.length > 0
+    ? competitionData.age_categories.map(ac => ({
+        name: ac.category_name,
+        events: defaultAgeCategories.find(d => d.name === ac.category_name)?.events || defaultAgeCategories[0].events,
+      }))
+    : defaultAgeCategories;
+
+  // Event min/max player mapping
+  const eventPlayerLimits: Record<string, { min: number; max: number }> = {
+    'Team Demo': { min: 8, max: 11 },
+    'Individual Demo': { min: 1, max: 1 },
+    'Team Fari Soti': { min: 3, max: 4 },
+    'Individual Fari Soti': { min: 1, max: 1 },
+    'Team Single Soti': { min: 3, max: 4 },
+    'Individual Single Soti': { min: 1, max: 1 },
+  };
 
   return (
     <div className="min-h-screen bg-gray-100">
@@ -207,9 +233,18 @@ export function ReportPage({ userEmail, onLogout, onNavigate, competition, distr
                   e.preventDefault();
                   onNavigate && onNavigate('summary-sheet');
                 }}
-                className="block px-6 py-3 pl-14 bg-blue-700 text-white"
+                className="block px-6 py-3 pl-14 text-gray-300 hover:bg-gray-700 transition-colors"
               >
                 Summary Sheet Print
+              </a>
+              <a
+                href="#"
+                onClick={(e) => {
+                  e.preventDefault();
+                }}
+                className="block px-6 py-3 pl-14 bg-blue-700 text-white"
+              >
+                Rough Report
               </a>
             </div>
           )}
@@ -230,115 +265,150 @@ export function ReportPage({ userEmail, onLogout, onNavigate, competition, distr
         {/* Header */}
         <div className="bg-white shadow-sm border-b border-gray-200 px-6 py-4 print:hidden">
           <div className="flex items-center justify-between">
-            <h1 className="text-gray-800">Maharashtra ({gender === 'male' ? 'Male' : 'Female'})</h1>
+            <h1 className="text-gray-800">Maharashtra ({gender === 'male' ? 'Male' : gender === 'female' ? 'Female' : 'All'})</h1>
             <nav className="text-sm text-gray-500">
               <a href="#" className="text-blue-600 hover:underline" onClick={(e) => { e.preventDefault(); onNavigate && onNavigate('dashboard'); }}>Dashboard</a>
               <span className="mx-2">/</span>
-              <span>Rough Report ({gender === 'male' ? 'Male' : 'Female'})</span>
+              <a href="#" className="text-blue-600 hover:underline" onClick={(e) => { e.preventDefault(); onNavigate && onNavigate('summary-sheet'); }}>Summary Sheet</a>
+              <span className="mx-2">/</span>
+              <span>Rough Report ({gender === 'male' ? 'Male' : gender === 'female' ? 'Female' : 'All'})</span>
             </nav>
           </div>
         </div>
 
         {/* Content */}
         <div className="p-6">
-          {/* Report Header Card */}
-          <div className="bg-white rounded-lg shadow mb-6">
-            {/* Top Bar with Title and Buttons */}
-            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
-              <div className="flex items-center gap-4">
-                <img src={logoImage} alt="Federation Logo" className="h-12 w-12 object-contain" />
-                <h2 className="text-gray-800">Rough Report ({gender === 'male' ? 'Male' : 'Female'})</h2>
-              </div>
-              <div className="flex gap-3 print:hidden">
-                <button className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded text-sm transition-colors flex items-center gap-2">
-                  <Lock className="w-4 h-4" />
-                  Lock Applications
-                </button>
-                <button
-                  onClick={handlePrint}
-                  className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded text-sm transition-colors flex items-center gap-2"
-                >
-                  <Printer className="w-4 h-4" />
-                  Print
-                </button>
+          {/* Error Banner */}
+          {error && (
+            <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6 flex items-center gap-3 print:hidden">
+              <AlertCircle className="w-5 h-5 text-red-500 shrink-0" />
+              <div>
+                <p className="text-red-800 text-sm font-medium">Failed to load report data</p>
+                <p className="text-red-600 text-sm">{error}</p>
               </div>
             </div>
+          )}
 
-            {/* Notes Section */}
-            <div className="px-6 py-4 bg-gray-50 border-b border-gray-200">
-              <p className="text-gray-800 mb-3"><strong>Note :</strong></p>
-              <ol className="space-y-2 text-sm text-gray-700 list-decimal pl-5">
-                <li>Registrations will be automatically closed for the state if both the male and female categories applications has been locked by the state .</li>
-                <li>You cannot be able to edit,delete added players</li>
-                <li>you cannot be able to change or deregister players from the event or neither do any more players registration in the events of competition .</li>
-                <li>If you want to make changes in the report even after locking the applications then contact administrator.</li>
-              </ol>
+          {/* Loading State */}
+          {loading && (
+            <div className="flex items-center justify-center py-20">
+              <div className="flex flex-col items-center gap-3">
+                <Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
+                <p className="text-gray-600 text-sm">Loading report data...</p>
+              </div>
             </div>
+          )}
 
-            {/* Event Details with Logos */}
-            <div className="px-6 py-8">
-              <div className="flex items-start justify-between mb-6">
-                <img src={logoImage} alt="Federation Logo Left" className="h-20 w-20 object-contain" />
-                <div className="text-center flex-1 px-4">
-                  <h2 className="text-gray-800 text-2xl mb-4" style={{ fontFamily: 'serif' }}>Gatka Federation of Maharashtra</h2>
-                  <h3 className="text-gray-800 mb-2">{currentCompetition.name}</h3>
-                  <p className="text-gray-700 text-sm">{currentCompetition.venue}</p>
-                  <p className="text-gray-700 text-sm mb-4">{currentCompetition.dates}</p>
-                  <p className="text-gray-800 mb-4">{district || 'Select District'} ({gender === 'male' ? 'Male' : 'Female'})</p>
-                  <div className="text-gray-700 text-sm">
-                    <p><strong>Players participated :- 0</strong></p>
-                    <p><strong>No. of events played by players :- 0</strong></p>
+          {!loading && (
+            <>
+              {/* Report Header Card */}
+              <div className="bg-white rounded-lg shadow mb-6">
+                {/* Top Bar with Title and Buttons */}
+                <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
+                  <div className="flex items-center gap-4">
+                    <img src={logoImage} alt="Federation Logo" className="h-12 w-12 object-contain" />
+                    <h2 className="text-gray-800">Rough Report ({gender === 'male' ? 'Male' : gender === 'female' ? 'Female' : 'All'})</h2>
+                  </div>
+                  <div className="flex gap-3 print:hidden">
+                    <button className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded text-sm transition-colors flex items-center gap-2">
+                      <Lock className="w-4 h-4" />
+                      Lock Applications
+                    </button>
+                    <button
+                      onClick={handlePrint}
+                      className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded text-sm transition-colors flex items-center gap-2"
+                    >
+                      <Printer className="w-4 h-4" />
+                      Print
+                    </button>
                   </div>
                 </div>
-                <img src={logoImage} alt="Federation Logo Right" className="h-20 w-20 object-contain" />
-              </div>
-            </div>
-          </div>
 
-          {/* Age Category Tables */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {ageCategories.map((category, idx) => (
-              <div key={idx} className="bg-white rounded-lg shadow">
-                <div className="p-4 border-b border-gray-200">
-                  <h3 className="text-gray-800">{category.name}</h3>
+                {/* Notes Section */}
+                <div className="px-6 py-4 bg-gray-50 border-b border-gray-200">
+                  <p className="text-gray-800 mb-3"><strong>Note :</strong></p>
+                  <ol className="space-y-2 text-sm text-gray-700 list-decimal pl-5">
+                    <li>Registrations will be automatically closed for the state if both the male and female categories applications has been locked by the state .</li>
+                    <li>You cannot be able to edit,delete added players</li>
+                    <li>you cannot be able to change or deregister players from the event or neither do any more players registration in the events of competition .</li>
+                    <li>If you want to make changes in the report even after locking the applications then contact administrator.</li>
+                  </ol>
                 </div>
-                <div className="overflow-x-auto">
-                  <table className="w-full">
-                    <thead className="bg-gray-50 border-b border-gray-200">
-                      <tr>
-                        <th className="px-4 py-3 text-left text-xs text-gray-700 uppercase tracking-wider">
-                          Sr No
-                        </th>
-                        <th className="px-4 py-3 text-left text-xs text-gray-700 uppercase tracking-wider">
-                          Event
-                        </th>
-                        <th className="px-4 py-3 text-left text-xs text-gray-700 uppercase tracking-wider">
-                          Min Player
-                        </th>
-                        <th className="px-4 py-3 text-left text-xs text-gray-700 uppercase tracking-wider">
-                          Max Player
-                        </th>
-                        <th className="px-4 py-3 text-left text-xs text-gray-700 uppercase tracking-wider">
-                          Registered
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-200">
-                      {category.events.map((event) => (
-                        <tr key={event.srNo} className="hover:bg-gray-50">
-                          <td className="px-4 py-3 text-sm text-gray-700">{event.srNo}</td>
-                          <td className="px-4 py-3 text-sm text-gray-700">{event.event}</td>
-                          <td className="px-4 py-3 text-sm text-gray-700">{event.minPlayer}</td>
-                          <td className="px-4 py-3 text-sm text-gray-700">{event.maxPlayer}</td>
-                          <td className="px-4 py-3 text-sm text-gray-700">{event.registered}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+
+                {/* Event Details with Logos */}
+                <div className="px-6 py-8">
+                  <div className="flex items-start justify-between mb-6">
+                    <img src={logoImage} alt="Federation Logo Left" className="h-20 w-20 object-contain" />
+                    <div className="text-center flex-1 px-4">
+                      <h2 className="text-gray-800 text-2xl mb-4" style={{ fontFamily: 'serif' }}>Gatka Federation of Maharashtra</h2>
+                      <h3 className="text-gray-800 mb-2">{compName}</h3>
+                      <p className="text-gray-700 text-sm">{compVenue}</p>
+                      <p className="text-gray-700 text-sm mb-4">{compDates}</p>
+                      <p className="text-gray-800 mb-4">{district || 'Select District'} ({gender === 'male' ? 'Male' : gender === 'female' ? 'Female' : 'All'})</p>
+                      <div className="text-gray-700 text-sm">
+                        <p><strong>Players participated :- {playersParticipated}</strong></p>
+                        <p><strong>No. of events played by players :- {eventsPlayed}</strong></p>
+                      </div>
+                    </div>
+                    <img src={logoImage} alt="Federation Logo Right" className="h-20 w-20 object-contain" />
+                  </div>
                 </div>
               </div>
-            ))}
-          </div>
+
+              {/* Age Category Tables */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {ageCategories.map((category, idx) => (
+                  <div key={idx} className="bg-white rounded-lg shadow">
+                    <div className="p-4 border-b border-gray-200">
+                      <h3 className="text-gray-800">{category.name}</h3>
+                    </div>
+                    <div className="overflow-x-auto">
+                      <table className="w-full">
+                        <thead className="bg-gray-50 border-b border-gray-200">
+                          <tr>
+                            <th className="px-4 py-3 text-left text-xs text-gray-700 uppercase tracking-wider">
+                              Sr No
+                            </th>
+                            <th className="px-4 py-3 text-left text-xs text-gray-700 uppercase tracking-wider">
+                              Event
+                            </th>
+                            <th className="px-4 py-3 text-left text-xs text-gray-700 uppercase tracking-wider">
+                              Min Player
+                            </th>
+                            <th className="px-4 py-3 text-left text-xs text-gray-700 uppercase tracking-wider">
+                              Max Player
+                            </th>
+                            <th className="px-4 py-3 text-left text-xs text-gray-700 uppercase tracking-wider">
+                              Registered
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-200">
+                          {category.events.map((event, eventIdx) => {
+                            const limits = eventPlayerLimits[event] || { min: 1, max: 1 };
+                            const regCount = registrationCounts[category.name]?.[event] || 0;
+                            return (
+                              <tr key={eventIdx} className="hover:bg-gray-50">
+                                <td className="px-4 py-3 text-sm text-gray-700">{eventIdx + 1}</td>
+                                <td className="px-4 py-3 text-sm text-gray-700">{event}</td>
+                                <td className="px-4 py-3 text-sm text-gray-700">{limits.min}</td>
+                                <td className="px-4 py-3 text-sm text-gray-700">{limits.max}</td>
+                                <td className="px-4 py-3 text-sm text-gray-700">
+                                  <span className={regCount > 0 ? 'text-green-600 font-medium' : 'text-gray-400'}>
+                                    {regCount > 0 ? regCount : 'N-A'}
+                                  </span>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
         </div>
       </div>
     </div>
