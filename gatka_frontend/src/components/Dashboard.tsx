@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
-import { ChevronDown, ChevronUp, Users, UserPlus, ArrowUpDown, Menu, X } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { ChevronDown, ChevronUp, Users, UserPlus, ArrowUpDown, Menu, X, Loader2, Trophy, MapPin } from 'lucide-react';
+import { getDashboardStats } from '../api/api';
 
 interface DashboardProps {
   userEmail: string;
@@ -14,6 +15,24 @@ export function Dashboard({ userEmail, onLogout, onNavigate, isAdmin }: Dashboar
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [manageRegDropdownOpen, setManageRegDropdownOpen] = useState(false);
   const [stateReportsDropdownOpen, setStateReportsDropdownOpen] = useState(false);
+  
+  const [stats, setStats] = useState({ total_players: 0, total_competitions: 0, total_areas: 0 });
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    const fetchStats = async () => {
+      try {
+        const data = await getDashboardStats();
+        setStats(data);
+      } catch (err: any) {
+        setError(err.message || 'Failed to load stats');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchStats();
+  }, []);
 
   return (
     <div className="min-h-screen bg-gray-100">
@@ -149,47 +168,77 @@ export function Dashboard({ userEmail, onLogout, onNavigate, isAdmin }: Dashboar
         {/* Dashboard Content */}
         <div className="p-6">
           {/* Stats Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-            {/* Players Card */}
-            <div className="bg-cyan-600 text-white rounded-lg p-6 relative overflow-hidden">
-              <div className="relative z-10">
-                <div className="text-5xl mb-2">0</div>
-                <div className="text-sm mb-4">Players</div>
-                <button 
-                  onClick={() => onNavigate && onNavigate('players')}
-                  className="bg-cyan-700 hover:bg-cyan-800 text-white px-4 py-2 rounded text-sm transition-colors flex items-center gap-2"
-                >
-                  View all
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                  </svg>
-                </button>
-              </div>
-              <div className="absolute right-4 top-4 opacity-20">
-                <Users className="w-24 h-24" />
-              </div>
+          {isLoading ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
             </div>
+          ) : error ? (
+            <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded mb-8">
+              {error}
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+              {/* Players Card */}
+              <div className="bg-cyan-600 text-white rounded-lg p-6 relative overflow-hidden">
+                <div className="relative z-10">
+                  <div className="text-5xl mb-2">{stats.total_players}</div>
+                  <div className="text-sm mb-4">Total Players</div>
+                  <button 
+                    onClick={() => onNavigate && onNavigate('players')}
+                    className="bg-cyan-700 hover:bg-cyan-800 text-white px-4 py-2 rounded text-sm transition-colors flex items-center gap-2"
+                  >
+                    View all
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                    </svg>
+                  </button>
+                </div>
+                <div className="absolute right-4 top-4 opacity-20">
+                  <Users className="w-24 h-24" />
+                </div>
+              </div>
 
-            {/* Players Registrations Card */}
-            <div className="bg-yellow-500 text-white rounded-lg p-6 relative overflow-hidden">
-              <div className="relative z-10">
-                <div className="text-5xl mb-2">0</div>
-                <div className="text-sm mb-4">Players Registrations</div>
-                <button 
-                  onClick={() => onNavigate && onNavigate('registrations')}
-                  className="bg-yellow-600 hover:bg-yellow-700 text-white px-4 py-2 rounded text-sm transition-colors flex items-center gap-2"
-                >
-                  View all
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                  </svg>
-                </button>
+              {/* Competitions Card */}
+              <div className="bg-yellow-500 text-white rounded-lg p-6 relative overflow-hidden">
+                <div className="relative z-10">
+                  <div className="text-5xl mb-2">{stats.total_competitions}</div>
+                  <div className="text-sm mb-4">Total Competitions</div>
+                  <button 
+                    onClick={() => onNavigate && onNavigate('manage-competitions')}
+                    className="bg-yellow-600 hover:bg-yellow-700 text-white px-4 py-2 rounded text-sm transition-colors flex items-center gap-2"
+                  >
+                    View all
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                    </svg>
+                  </button>
+                </div>
+                <div className="absolute right-4 top-4 opacity-20">
+                  <Trophy className="w-24 h-24" />
+                </div>
               </div>
-              <div className="absolute right-4 top-4 opacity-20">
-                <UserPlus className="w-24 h-24" />
+
+              {/* Areas Card */}
+              <div className="bg-purple-500 text-white rounded-lg p-6 relative overflow-hidden">
+                <div className="relative z-10">
+                  <div className="text-5xl mb-2">{stats.total_areas}</div>
+                  <div className="text-sm mb-4">Total Areas</div>
+                  <button 
+                    onClick={() => onNavigate && onNavigate('manage-users')}
+                    className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded text-sm transition-colors flex items-center gap-2"
+                  >
+                    View all
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                    </svg>
+                  </button>
+                </div>
+                <div className="absolute right-4 top-4 opacity-20">
+                  <MapPin className="w-24 h-24" />
+                </div>
               </div>
             </div>
-          </div>
+          )}
 
           {/* Table Section */}
           <div className="bg-white rounded-lg shadow">

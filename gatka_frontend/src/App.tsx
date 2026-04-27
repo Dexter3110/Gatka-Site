@@ -95,6 +95,7 @@ export default function App() {
 };
 
   const handleLogout = () => {
+    import('./api/api').then(({ clearToken }) => clearToken());
     setShowDashboard(false);
     setLoggedInEmail('');
     setEmail('');

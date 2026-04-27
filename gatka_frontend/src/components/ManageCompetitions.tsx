@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
-import { Menu, X, Users, Trophy, Edit2, Trash2, Search, Plus } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Menu, X, Users, Trophy, Edit2, Trash2, Search, Plus, Loader2 } from 'lucide-react';
+import { listCompetitions, deleteCompetition, Competition } from '../api/api';
 
 interface ManageCompetitionsProps {
   userEmail: string;
@@ -11,41 +12,33 @@ export function ManageCompetitions({ userEmail, onLogout, onNavigate }: ManageCo
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
 
-  // Mock competitions data
-  const [competitions, setCompetitions] = useState([
-    {
-      id: 1,
-      name: '9th SENIOR NATIONAL GATKA CHAMPIONSHIP 2025 (MEN & WOMEN)',
-      venue: 'Ratwara Sahib, New Chandigarh, Mohali (Punjab)',
-      dates: '28-30 December 2025',
-      status: 'Active',
-      participants: 89,
-      registrationDeadline: '20 Dec 2025'
-    },
-    {
-      id: 2,
-      name: '5th JUNIOR NATIONAL GATKA CHAMPIONSHIP 2025',
-      venue: 'Mumbai, Maharashtra',
-      dates: '15-17 January 2025',
-      status: 'Active',
-      participants: 67,
-      registrationDeadline: '10 Jan 2025'
-    },
-    {
-      id: 3,
-      name: '3rd STATE LEVEL GATKA CHAMPIONSHIP 2025',
-      venue: 'Pune, Maharashtra',
-      dates: '10-12 February 2025',
-      status: 'Upcoming',
-      participants: 0,
-      registrationDeadline: '5 Feb 2025'
-    },
-  ]);
+  const [competitions, setCompetitions] = useState<Competition[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState('');
 
-  const handleDelete = (id: number) => {
+  useEffect(() => {
+    const fetchCompetitions = async () => {
+      try {
+        const data = await listCompetitions();
+        setCompetitions(data);
+      } catch (err: any) {
+        setError(err.message || 'Failed to fetch competitions');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchCompetitions();
+  }, []);
+
+  const handleDelete = async (id: number) => {
     if (confirm('Are you sure you want to delete this competition?')) {
-      setCompetitions(competitions.filter(comp => comp.id !== id));
-      alert('Competition deleted successfully! (Mock - no backend yet)');
+      try {
+        await deleteCompetition(id);
+        setCompetitions(competitions.filter(comp => comp.id !== id));
+        alert('Competition deleted successfully!');
+      } catch (err: any) {
+        alert(err.message || 'Failed to delete competition');
+      }
     }
   };
 
@@ -56,7 +49,7 @@ export function ManageCompetitions({ userEmail, onLogout, onNavigate }: ManageCo
 
   const filteredCompetitions = competitions.filter(comp =>
     comp.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    comp.venue.toLowerCase().includes(searchQuery.toLowerCase())
+    (comp.venue && comp.venue.toLowerCase().includes(searchQuery.toLowerCase()))
   );
 
   return (
@@ -200,7 +193,19 @@ export function ManageCompetitions({ userEmail, onLogout, onNavigate }: ManageCo
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200">
-                  {filteredCompetitions.length === 0 ? (
+                  {isLoading ? (
+                    <tr>
+                      <td colSpan={6} className="px-6 py-8 text-center">
+                        <Loader2 className="w-8 h-8 text-blue-600 animate-spin mx-auto" />
+                      </td>
+                    </tr>
+                  ) : error ? (
+                    <tr>
+                      <td colSpan={6} className="px-6 py-8 text-center text-red-600">
+                        {error}
+                      </td>
+                    </tr>
+                  ) : filteredCompetitions.length === 0 ? (
                     <tr>
                       <td colSpan={6} className="px-6 py-8 text-center text-gray-500">
                         No competitions found
@@ -211,25 +216,25 @@ export function ManageCompetitions({ userEmail, onLogout, onNavigate }: ManageCo
                       <tr key={comp.id} className="hover:bg-gray-50">
                         <td className="px-6 py-4">
                           <div className="text-sm text-gray-800">{comp.name}</div>
-                          <div className="text-xs text-gray-500 mt-1">Registration Deadline: {comp.registrationDeadline}</div>
+                          <div className="text-xs text-gray-500 mt-1">Registration Deadline: {comp.registration_deadline || 'N/A'}</div>
                         </td>
                         <td className="px-6 py-4 text-sm text-gray-700">
-                          {comp.venue}
+                          {comp.venue || 'N/A'}
                         </td>
                         <td className="px-6 py-4 text-sm text-gray-700">
-                          {comp.dates}
+                          {comp.start_date} {comp.end_date ? `to ${comp.end_date}` : ''}
                         </td>
                         <td className="px-6 py-4">
                           <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs ${
-                            comp.status === 'Active' ? 'bg-green-100 text-green-800' : 
-                            comp.status === 'Upcoming' ? 'bg-orange-100 text-orange-800' :
+                            comp.status.toLowerCase() === 'active' ? 'bg-green-100 text-green-800' : 
+                            comp.status.toLowerCase() === 'upcoming' ? 'bg-orange-100 text-orange-800' :
                             'bg-gray-100 text-gray-800'
                           }`}>
                             {comp.status}
                           </span>
                         </td>
                         <td className="px-6 py-4 text-sm text-gray-700">
-                          {comp.participants}
+                          -
                         </td>
                         <td className="px-6 py-4">
                           <div className="flex items-center gap-2">
@@ -264,19 +269,19 @@ export function ManageCompetitions({ userEmail, onLogout, onNavigate }: ManageCo
               <div className="p-4 bg-green-50 rounded-lg">
                 <p className="text-sm text-gray-600">Active Competitions</p>
                 <p className="text-2xl text-gray-800 mt-1">
-                  {competitions.filter(c => c.status === 'Active').length}
+                  {competitions.filter(c => c.status.toLowerCase() === 'active').length}
                 </p>
               </div>
               <div className="p-4 bg-orange-50 rounded-lg">
                 <p className="text-sm text-gray-600">Upcoming Competitions</p>
                 <p className="text-2xl text-gray-800 mt-1">
-                  {competitions.filter(c => c.status === 'Upcoming').length}
+                  {competitions.filter(c => c.status.toLowerCase() === 'upcoming').length}
                 </p>
               </div>
               <div className="p-4 bg-blue-50 rounded-lg">
                 <p className="text-sm text-gray-600">Total Participants</p>
                 <p className="text-2xl text-gray-800 mt-1">
-                  {competitions.reduce((sum, c) => sum + c.participants, 0)}
+                  -
                 </p>
               </div>
             </div>

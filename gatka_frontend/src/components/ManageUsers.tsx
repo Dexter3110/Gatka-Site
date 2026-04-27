@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
-import { Menu, X, Users, Trophy, Edit2, Trash2, Search, Plus, UserPlus } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Menu, X, Users, Trophy, Edit2, Trash2, Search, Plus, UserPlus, Loader2 } from 'lucide-react';
+import { listUsers, deleteUser, updateUser, User } from '../api/api';
 
 interface ManageUsersProps {
   userEmail: string;
@@ -11,19 +12,33 @@ export function ManageUsers({ userEmail, onLogout, onNavigate }: ManageUsersProp
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
 
-  // Mock users data
-  const [users, setUsers] = useState([
-    { id: 1, name: 'Rajesh Kumar', email: 'rajesh@gatka.com', role: 'User', status: 'Active', joinDate: '2 Apr 2026', district: 'Mumbai' },
-    { id: 2, name: 'Priya Singh', email: 'priya@gatka.com', role: 'User', status: 'Active', joinDate: '1 Apr 2026', district: 'Pune' },
-    { id: 3, name: 'Amit Patel', email: 'amit@gatka.com', role: 'User', status: 'Pending', joinDate: '31 Mar 2026', district: 'Nagpur' },
-    { id: 4, name: 'Sunita Deshmukh', email: 'sunita@gatka.com', role: 'User', status: 'Active', joinDate: '30 Mar 2026', district: 'Nashik' },
-    { id: 5, name: 'Vikram Rao', email: 'vikram@gatka.com', role: 'User', status: 'Inactive', joinDate: '29 Mar 2026', district: 'Thane' },
-  ]);
+  const [users, setUsers] = useState<User[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState('');
 
-  const handleDelete = (id: number) => {
+  useEffect(() => {
+    const fetchUsers = async () => {
+      try {
+        const data = await listUsers();
+        setUsers(data);
+      } catch (err: any) {
+        setError(err.message || 'Failed to fetch users');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchUsers();
+  }, []);
+
+  const handleDelete = async (id: number) => {
     if (confirm('Are you sure you want to delete this user?')) {
-      setUsers(users.filter(user => user.id !== id));
-      alert('User deleted successfully! (Mock - no backend yet)');
+      try {
+        await deleteUser(id);
+        setUsers(users.filter(user => user.id !== id));
+        alert('User deleted successfully!');
+      } catch (err: any) {
+        alert(err.message || 'Failed to delete user');
+      }
     }
   };
 
@@ -32,22 +47,24 @@ export function ManageUsers({ userEmail, onLogout, onNavigate }: ManageUsersProp
     // Would open edit modal or navigate to edit page
   };
 
-  const handleStatusToggle = (id: number) => {
-    setUsers(users.map(user => {
-      if (user.id === id) {
-        return {
-          ...user,
-          status: user.status === 'Active' ? 'Inactive' : 'Active'
-        };
-      }
-      return user;
-    }));
+  const handleStatusToggle = async (id: number, currentStatus: boolean) => {
+    try {
+      await updateUser(id, { is_active: !currentStatus });
+      setUsers(users.map(user => {
+        if (user.id === id) {
+          return { ...user, is_active: !currentStatus };
+        }
+        return user;
+      }));
+    } catch (err: any) {
+      alert(err.message || 'Failed to update user status');
+    }
   };
 
   const filteredUsers = users.filter(user =>
-    user.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    user.full_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
     user.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    user.district.toLowerCase().includes(searchQuery.toLowerCase())
+    (user.area && user.area.name.toLowerCase().includes(searchQuery.toLowerCase()))
   );
 
   return (
@@ -191,7 +208,19 @@ export function ManageUsers({ userEmail, onLogout, onNavigate }: ManageUsersProp
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200">
-                  {filteredUsers.length === 0 ? (
+                  {isLoading ? (
+                    <tr>
+                      <td colSpan={6} className="px-6 py-8 text-center">
+                        <Loader2 className="w-8 h-8 text-blue-600 animate-spin mx-auto" />
+                      </td>
+                    </tr>
+                  ) : error ? (
+                    <tr>
+                      <td colSpan={6} className="px-6 py-8 text-center text-red-600">
+                        {error}
+                      </td>
+                    </tr>
+                  ) : filteredUsers.length === 0 ? (
                     <tr>
                       <td colSpan={6} className="px-6 py-8 text-center text-gray-500">
                         No users found
@@ -206,31 +235,29 @@ export function ManageUsers({ userEmail, onLogout, onNavigate }: ManageUsersProp
                               <Users className="w-5 h-5 text-blue-600" />
                             </div>
                             <div>
-                              <div className="text-sm text-gray-800">{user.name}</div>
+                              <div className="text-sm text-gray-800">{user.full_name}</div>
                               <div className="text-xs text-gray-500">{user.email}</div>
                             </div>
                           </div>
                         </td>
                         <td className="px-6 py-4 text-sm text-gray-700">
-                          {user.district}
+                          {user.area?.name || 'N/A'}
                         </td>
                         <td className="px-6 py-4 text-sm text-gray-700">
                           {user.role}
                         </td>
                         <td className="px-6 py-4">
                           <button
-                            onClick={() => handleStatusToggle(user.id)}
+                            onClick={() => handleStatusToggle(user.id, user.is_active)}
                             className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs cursor-pointer ${
-                              user.status === 'Active' ? 'bg-green-100 text-green-800' : 
-                              user.status === 'Pending' ? 'bg-orange-100 text-orange-800' :
-                              'bg-gray-100 text-gray-800'
+                              user.is_active ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
                             }`}
                           >
-                            {user.status}
+                            {user.is_active ? 'Active' : 'Inactive'}
                           </button>
                         </td>
                         <td className="px-6 py-4 text-sm text-gray-700">
-                          {user.joinDate}
+                          {new Date(user.created_at).toLocaleDateString()}
                         </td>
                         <td className="px-6 py-4">
                           <div className="flex items-center gap-2">
@@ -269,19 +296,19 @@ export function ManageUsers({ userEmail, onLogout, onNavigate }: ManageUsersProp
               <div className="p-4 bg-green-50 rounded-lg">
                 <p className="text-sm text-gray-600">Active Users</p>
                 <p className="text-2xl text-gray-800 mt-1">
-                  {users.filter(u => u.status === 'Active').length}
+                  {users.filter(u => u.is_active).length}
                 </p>
               </div>
               <div className="p-4 bg-orange-50 rounded-lg">
                 <p className="text-sm text-gray-600">Pending Users</p>
                 <p className="text-2xl text-gray-800 mt-1">
-                  {users.filter(u => u.status === 'Pending').length}
+                  0
                 </p>
               </div>
               <div className="p-4 bg-gray-50 rounded-lg">
                 <p className="text-sm text-gray-600">Inactive Users</p>
                 <p className="text-2xl text-gray-800 mt-1">
-                  {users.filter(u => u.status === 'Inactive').length}
+                  {users.filter(u => !u.is_active).length}
                 </p>
               </div>
             </div>

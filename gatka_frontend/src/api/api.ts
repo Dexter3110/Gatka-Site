@@ -64,6 +64,11 @@ export const login = (email: string, password: string) =>
 
 export const getMe = () => apiFetch<User>("/auth/me");
 
+// ─── Dashboard ───────────────────────────────────────────────
+
+export const getDashboardStats = () =>
+  apiFetch<{ total_players: number; total_competitions: number; total_areas: number }>("/dashboard/stats");
+
 // ─── Areas ───────────────────────────────────────────────────
 
 export const listAreas = () => apiFetch<Area[]>("/users/areas/list");
